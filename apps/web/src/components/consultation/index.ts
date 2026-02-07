@@ -1,0 +1,9 @@
+export { PatientSummary } from './patient-summary';
+export { VitalsEntry } from './vitals-entry';
+export { AIScribe } from './ai-scribe';
+export { ClinicalNotes } from './clinical-notes';
+export { DiagnosisSection } from './diagnosis-section';
+export { PrescriptionSection } from './prescription-section';
+export { LabOrderSection } from './lab-order-section';
+export { FollowUpSection } from './follow-up-section';
+export { ConsultationComplete } from './consultation-complete';

@@ -1,0 +1,9 @@
+📋 Test Credentials:
+─────────────────────────────────────
+Admin:       9876543210 / Admin@123
+Doctor:      9876543211 / Doctor@123
+Nurse:       9876543212 / Nurse@123
+Receptionist: 9876543213 / Reception@123
+Pharmacist:  9876543214 / Pharma@123
+Lab Tech:    9876543215 / LabTech@123
+Accountant:  9876543216 / Account@123

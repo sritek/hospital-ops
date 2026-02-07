@@ -1,0 +1,11 @@
+{
+  "framework": "nextjs",
+  "installCommand": "pnpm install",
+  "buildCommand": "pnpm build --filter=@hospital-ops/web",
+  "outputDirectory": "apps/web/.next",
+  "env": {
+    "NEXT_PUBLIC_USE_MOCK_API": "true",
+    "NEXT_PUBLIC_ENABLE_AI_FEATURES": "true",
+    "NEXT_PUBLIC_ENABLE_TELEMEDICINE": "true"
+  }
+}

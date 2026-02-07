@@ -1,0 +1,28 @@
+/**
+ * Redis Client
+ */
+
+import Redis from 'ioredis';
+import { env } from '../config/env';
+import { logger } from './logger';
+
+export const redis = new Redis(env.REDIS_URL, {
+  maxRetriesPerRequest: 3,
+  retryStrategy: (times) => {
+    if (times > 3) {
+      logger.error('Redis connection failed after 3 retries');
+      return null;
+    }
+    return Math.min(times * 200, 2000);
+  },
+});
+
+redis.on('connect', () => {
+  logger.info('Redis connected');
+});
+
+redis.on('error', (err) => {
+  logger.error({ err }, 'Redis error');
+});
+
+export default redis;

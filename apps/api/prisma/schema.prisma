@@ -1,0 +1,392 @@
+// Hospital-Ops Prisma Schema
+// PostgreSQL with Row-Level Security
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// TENANT & FACILITY MANAGEMENT
+// ============================================
+
+model Tenant {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @db.VarChar(255)
+  slug      String   @unique @db.VarChar(100)
+  legalName String?  @map("legal_name") @db.VarChar(255)
+  email     String   @db.VarChar(255)
+  phone     String?  @db.VarChar(20)
+  logoUrl   String?  @map("logo_url") @db.VarChar(500)
+
+  // ABDM Integration
+  hfrId String? @map("hfr_id") @db.VarChar(50)
+  hipId String? @map("hip_id") @db.VarChar(50)
+
+  // Address
+  address String? @db.Text
+  city    String? @db.VarChar(100)
+  state   String? @db.VarChar(100)
+  pincode String? @db.VarChar(10)
+
+  // Settings
+  settings Json @default("{}")
+
+  // Subscription
+  subscriptionPlan   String    @default("trial") @map("subscription_plan") @db.VarChar(50)
+  subscriptionStatus String    @default("active") @map("subscription_status") @db.VarChar(20)
+  trialEndsAt        DateTime? @map("trial_ends_at") @db.Timestamptz
+
+  // Audit
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz
+
+  // Relations
+  branches Branch[]
+  users    User[]
+  patients Patient[]
+
+  @@map("tenants")
+}
+
+model Branch {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  name     String @db.VarChar(255)
+  code     String @db.VarChar(20)
+
+  // Contact
+  address String? @db.Text
+  city    String? @db.VarChar(100)
+  state   String? @db.VarChar(100)
+  pincode String? @db.VarChar(10)
+  phone   String? @db.VarChar(20)
+  email   String? @db.VarChar(255)
+
+  // Tax
+  gstin String? @db.VarChar(20)
+
+  // Operations
+  timezone     String @default("Asia/Kolkata") @db.VarChar(50)
+  currency     String @default("INR") @db.VarChar(3)
+  workingHours Json?  @map("working_hours")
+
+  // Settings
+  settings Json    @default("{}")
+  isActive Boolean @default(true) @map("is_active")
+
+  // Audit
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz
+
+  // Relations
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  userBranches UserBranch[]
+  appointments Appointment[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@map("branches")
+}
+
+// ============================================
+// USER & STAFF MANAGEMENT
+// ============================================
+
+enum UserRole {
+  super_admin
+  branch_admin
+  doctor
+  nurse
+  receptionist
+  pharmacist
+  lab_tech
+  accountant
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  email        String?  @db.VarChar(255)
+  phone        String   @db.VarChar(20)
+  passwordHash String   @map("password_hash") @db.VarChar(255)
+  name         String   @db.VarChar(255)
+  gender       String?  @db.VarChar(10)
+  avatarUrl    String?  @map("avatar_url") @db.VarChar(500)
+  role         UserRole
+
+  // Professional (for doctors/nurses)
+  registrationNumber  String? @map("registration_number") @db.VarChar(50)
+  registrationCouncil String? @map("registration_council") @db.VarChar(100)
+  specialization      String? @db.VarChar(100)
+  qualification       String? @db.VarChar(255)
+  hprId               String? @map("hpr_id") @db.VarChar(50)
+  digitalSignatureUrl String? @map("digital_signature_url") @db.VarChar(500)
+
+  // Status
+  isActive           Boolean   @default(true) @map("is_active")
+  lastLoginAt        DateTime? @map("last_login_at") @db.Timestamptz
+  failedLoginCount   Int       @default(0) @map("failed_login_count")
+  lockedUntil        DateTime? @map("locked_until") @db.Timestamptz
+
+  // Settings
+  settings Json @default("{}")
+
+  // Audit
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz
+
+  // Relations
+  tenant          Tenant            @relation(fields: [tenantId], references: [id])
+  userBranches    UserBranch[]
+  appointments    Appointment[]     @relation("DoctorAppointments")
+  refreshTokens   RefreshToken[]
+  passwordHistory PasswordHistory[]
+
+  @@unique([tenantId, phone])
+  @@index([tenantId])
+  @@map("users")
+}
+
+model UserBranch {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  branchId  String   @map("branch_id") @db.Uuid
+  isPrimary Boolean  @default(false) @map("is_primary")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  user   User   @relation(fields: [userId], references: [id])
+  branch Branch @relation(fields: [branchId], references: [id])
+
+  @@unique([userId, branchId])
+  @@map("user_branches")
+}
+
+// ============================================
+// PATIENT MANAGEMENT
+// ============================================
+
+model Patient {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+
+  // ABHA Integration
+  abhaNumber  String? @map("abha_number") @db.VarChar(20)
+  abhaAddress String? @map("abha_address") @db.VarChar(100)
+
+  // Identity
+  phone       String  @db.VarChar(20)
+  name        String  @db.VarChar(255)
+  email       String? @db.VarChar(255)
+  gender      String? @db.VarChar(10)
+  dateOfBirth DateTime? @map("date_of_birth") @db.Date
+  photoUrl    String? @map("photo_url") @db.VarChar(500)
+
+  // Address
+  address String? @db.Text
+  city    String? @db.VarChar(100)
+  state   String? @db.VarChar(100)
+  pincode String? @db.VarChar(10)
+
+  // Emergency Contact
+  emergencyContactName     String? @map("emergency_contact_name") @db.VarChar(255)
+  emergencyContactPhone    String? @map("emergency_contact_phone") @db.VarChar(20)
+  emergencyContactRelation String? @map("emergency_contact_relation") @db.VarChar(50)
+
+  // Medical
+  bloodGroup        String?  @map("blood_group") @db.VarChar(5)
+  allergies         String[] @default([])
+  chronicConditions String[] @default([]) @map("chronic_conditions")
+
+  // Preferences
+  preferredLanguage String  @default("en") @map("preferred_language") @db.VarChar(10)
+  marketingConsent  Boolean @default(true) @map("marketing_consent")
+
+  // Booking Status
+  noShowCount   Int    @default(0) @map("no_show_count")
+  bookingStatus String @default("normal") @map("booking_status") @db.VarChar(20)
+
+  // First Visit
+  firstVisitBranchId String? @map("first_visit_branch_id") @db.Uuid
+
+  // Audit
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz
+
+  // Relations
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  appointments Appointment[]
+
+  @@unique([tenantId, phone])
+  @@index([tenantId])
+  @@index([tenantId, abhaNumber])
+  @@map("patients")
+}
+
+// ============================================
+// APPOINTMENT MANAGEMENT
+// ============================================
+
+enum AppointmentStatus {
+  booked
+  confirmed
+  checked_in
+  in_progress
+  completed
+  cancelled
+  no_show
+}
+
+enum AppointmentType {
+  consultation
+  follow_up
+  procedure
+  telemedicine
+}
+
+model Appointment {
+  id        String @id @default(uuid()) @db.Uuid
+  tenantId  String @map("tenant_id") @db.Uuid
+  branchId  String @map("branch_id") @db.Uuid
+  patientId String @map("patient_id") @db.Uuid
+  doctorId  String @map("doctor_id") @db.Uuid
+
+  // Scheduling
+  appointmentDate DateTime          @map("appointment_date") @db.Date
+  startTime       String            @map("start_time") @db.VarChar(5)
+  endTime         String            @map("end_time") @db.VarChar(5)
+  duration        Int               @default(15)
+  type            AppointmentType   @default(consultation)
+  status          AppointmentStatus @default(booked)
+
+  // Queue
+  tokenNumber Int? @map("token_number")
+
+  // Booking Details
+  bookingSource   String  @default("web") @map("booking_source") @db.VarChar(20)
+  chiefComplaint  String? @map("chief_complaint") @db.Text
+  notes           String? @db.Text
+  rescheduleCount Int     @default(0) @map("reschedule_count")
+
+  // Pricing (locked at booking)
+  consultationFee Decimal? @map("consultation_fee") @db.Decimal(10, 2)
+
+  // Audit
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz
+  createdBy String?   @map("created_by") @db.Uuid
+  updatedBy String?   @map("updated_by") @db.Uuid
+  version   Int       @default(1)
+
+  // Relations
+  branch  Branch  @relation(fields: [branchId], references: [id])
+  patient Patient @relation(fields: [patientId], references: [id])
+  doctor  User    @relation("DoctorAppointments", fields: [doctorId], references: [id])
+
+  @@index([tenantId, branchId])
+  @@index([tenantId, patientId])
+  @@index([tenantId, doctorId, appointmentDate])
+  @@map("appointments")
+}
+
+// ============================================
+// AUTHENTICATION
+// ============================================
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  token     String    @unique @db.VarChar(500)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@map("refresh_tokens")
+}
+
+model OtpCode {
+  id        String    @id @default(uuid()) @db.Uuid
+  phone     String    @db.VarChar(20)
+  code      String    @db.VarChar(6)
+  purpose   String    @db.VarChar(20) // login, reset_password, verify_phone, register
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz
+  usedAt    DateTime? @map("used_at") @db.Timestamptz
+  attempts  Int       @default(0)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([phone, purpose])
+  @@index([code, phone])
+  @@map("otp_codes")
+}
+
+model PasswordHistory {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  passwordHash String   @map("password_hash") @db.VarChar(255)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_history")
+}
+
+model LoginAttempt {
+  id        String   @id @default(uuid()) @db.Uuid
+  phone     String   @db.VarChar(20)
+  ipAddress String   @map("ip_address") @db.VarChar(45)
+  success   Boolean
+  reason    String?  @db.VarChar(100)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([phone, createdAt(sort: Desc)])
+  @@index([ipAddress, createdAt(sort: Desc)])
+  @@map("login_attempts")
+}
+
+// ============================================
+// AUDIT LOGGING
+// ============================================
+
+model AuditLog {
+  id        String  @id @default(uuid()) @db.Uuid
+  tenantId  String  @map("tenant_id") @db.Uuid
+  branchId  String? @map("branch_id") @db.Uuid
+  userId    String? @map("user_id") @db.Uuid
+
+  // Action
+  action     String  @db.VarChar(100)
+  entityType String  @map("entity_type") @db.VarChar(50)
+  entityId   String? @map("entity_id") @db.Uuid
+
+  // Changes
+  oldValues Json? @map("old_values")
+  newValues Json? @map("new_values")
+
+  // Request Context
+  ipAddress String? @map("ip_address") @db.VarChar(45)
+  userAgent String? @map("user_agent") @db.Text
+  requestId String? @map("request_id") @db.VarChar(50)
+
+  // Timestamp
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([entityType, entityId])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("audit_logs")
+}
