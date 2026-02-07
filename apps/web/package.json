@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3001",
-    "build": "next build",
+    "build": "pnpm --filter=@hospital-ops/shared build && next build",
+    "build:next": "next build",
     "start": "next start -p 3001",
     "lint": "next lint",
     "lint:fix": "next lint --fix",
